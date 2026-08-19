@@ -1,1 +1,10 @@
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.log
+
+data/tracker.db
+data/config.ini
+*.csv
+!data/sample_channels.csv

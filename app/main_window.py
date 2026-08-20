@@ -471,12 +471,19 @@ class MainWindow(QMainWindow):
                 font-size: 8px;
                 white-space: normal;
                 word-wrap: break-word;
+                color: black;
             }
             QTableWidget::item:selected {
+                background-color: #4361ee;
                 color: white;
             }
             QTableWidget::item:hover {
-                background-color: transparent;
+                background-color: #e8eaf6;
+                color: black;
+            }
+            QTableWidget::item:selected:hover {
+                background-color: #4361ee;
+                color: white;
             }
         """)
         self.channelsTable.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)

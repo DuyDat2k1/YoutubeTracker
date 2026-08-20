@@ -581,10 +581,8 @@ class MainWindow(QMainWindow):
             return
         ch = channels[row]
         self.urlList.highlight_url(ch.url)
-        self.channelsTable.blockSignals(True)
         self._load_videos(ch.id)
         self._load_chart(ch.id)
-        self.channelsTable.blockSignals(False)
         self.tabWidget.setCurrentIndex(1)
 
     def _load_videos(self, channel_db_id: int) -> None:

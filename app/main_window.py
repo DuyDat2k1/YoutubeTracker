@@ -583,6 +583,7 @@ class MainWindow(QMainWindow):
         self.urlList.highlight_url(ch.url)
         self._load_videos(ch.id)
         self._load_chart(ch.id)
+        self.tabWidget.setCurrentIndex(1)
 
     def _load_videos(self, channel_db_id: int) -> None:
         videos = self._db.get_latest_videos(channel_db_id)

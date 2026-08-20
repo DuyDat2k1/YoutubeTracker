@@ -527,7 +527,7 @@ class MainWindow(QMainWindow):
         self.tabWidget.addTab(self.videosTable, "3 Latest Videos")
 
         chart_tab = QWidget()
-        self.tabWidget.addTab(chart_tab, "Subscriber Trend")
+        self.tabWidget.addTab(chart_tab, "Video Analytics")
 
         main_layout.addWidget(self.tabWidget)
 

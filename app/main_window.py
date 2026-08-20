@@ -5,7 +5,7 @@ import csv
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Qt, Signal, Slot
+from PySide6.QtCore import QThread, Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFileDialog, QGroupBox, QHeaderView, QHBoxLayout, QLabel, QLineEdit,
@@ -98,7 +98,7 @@ class UrlRow(QWidget):
         self.urlEdit.setMinimumHeight(32)
         layout.addWidget(self.urlEdit, 1)
 
-        self.removeBtn = QPushButton("X")
+        self.removeBtn = QPushButton("✕")
         self.removeBtn.setFixedWidth(36)
         self.removeBtn.setFixedHeight(32)
         self.removeBtn.setStyleSheet("""
@@ -108,8 +108,7 @@ class UrlRow(QWidget):
                 border: none;
                 border-radius: 6px;
                 font-weight: bold;
-                font-size: 12px;
-                text-transform: uppercase;
+                font-size: 14px;
             }
             QPushButton:hover { background-color: #c0392b; }
             QPushButton:pressed { background-color: #a93226; }
@@ -152,8 +151,8 @@ class UrlListWidget(QGroupBox):
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._scroll.setMinimumHeight(180)
-        self._scroll.setMaximumHeight(280)
+        self._scroll.setMinimumHeight(280)
+        self._scroll.setMaximumHeight(380)
 
         self._rows_container = QWidget()
         self._rows_container.setObjectName("rowsContainer")
@@ -196,10 +195,9 @@ class UrlListWidget(QGroupBox):
         self._rows_layout.insertWidget(self._rows_layout.count() - 1, row)
         row.urlEdit.setFocus()
         self._scroll_to_bottom()
-
-    def _on_row_removed(self, row: QWidget) -> None:
-        self._rows_layout.removeWidget(row)
-        row.deleteLater()
+        main_window = self._get_main_window()
+        if main_window and hasattr(main_window, "_save_urls"):
+            main_window._save_urls()
 
     def _on_remove_all(self) -> None:
         while self._rows_layout.count() > 1:
@@ -207,6 +205,27 @@ class UrlListWidget(QGroupBox):
             widget = item.widget()
             if widget:
                 widget.deleteLater()
+        main_window = self._get_main_window()
+        if main_window and hasattr(main_window, "_save_urls"):
+            main_window._save_urls()
+
+    def _on_row_removed(self, row: QWidget) -> None:
+        url = row.urlEdit.text().strip()
+        main_window = self._get_main_window()
+        if main_window and hasattr(main_window, "_delete_channel_by_url"):
+            main_window._delete_channel_by_url(url)
+        self._rows_layout.removeWidget(row)
+        row.deleteLater()
+        if main_window and hasattr(main_window, "_save_urls"):
+            main_window._save_urls()
+
+    def _get_main_window(self):
+        widget = self
+        while widget:
+            if isinstance(widget, MainWindow):
+                return widget
+            widget = widget.parent()
+        return None
 
     def _on_import_csv(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -219,11 +238,11 @@ class UrlListWidget(QGroupBox):
             with open(path, newline="", encoding="utf-8-sig") as f:
                 reader = csv.reader(f)
                 for idx, row in enumerate(reader):
-                    if not row or len(row) < 2:
+                    if not row:
                         continue
-                    if idx == 0:
+                    if idx == 0 and self._is_header_row(row):
                         continue
-                    url = row[1].strip()
+                    url = self._extract_url(row)
                     if url and self._is_youtube_url(url):
                         url_row = UrlRow(url)
                         url_row.removed.connect(self._on_row_removed)
@@ -235,6 +254,21 @@ class UrlListWidget(QGroupBox):
         QMessageBox.information(self, "Import", f"Imported {count} links.")
         self._scroll_to_bottom()
         self.imported.emit()
+        if hasattr(self.parent(), "_save_urls"):
+            self.parent()._save_urls()
+
+    @staticmethod
+    def _is_header_row(row: list[str]) -> bool:
+        if not row:
+            return False
+        first = row[0].strip().lower()
+        return first in {"url", "channel", "link", "urls", "channels"}
+
+    @staticmethod
+    def _extract_url(row: list[str]) -> str:
+        if len(row) >= 2:
+            return row[1].strip()
+        return row[0].strip() if row else ""
 
     @staticmethod
     def _is_youtube_url(text: str) -> bool:
@@ -245,6 +279,26 @@ class UrlListWidget(QGroupBox):
         self._scroll.verticalScrollBar().setValue(
             self._scroll.verticalScrollBar().maximum()
         )
+
+    def highlight_url(self, url: str) -> None:
+        for i in range(self._rows_layout.count()):
+            item = self._rows_layout.itemAt(i)
+            widget = item.widget()
+            if isinstance(widget, UrlRow):
+                row_url = widget.urlEdit.text().strip()
+                if row_url == url:
+                    widget.urlEdit.setStyleSheet("""
+                        QLineEdit {
+                            background-color: #d4edda;
+                            border: 2px solid #28a745;
+                        }
+                    """)
+                    self._scroll.ensureWidgetVisible(widget)
+                    QTimer.singleShot(2000, lambda w=widget: self._clear_highlight(w))
+                    break
+
+    def _clear_highlight(self, widget: QWidget) -> None:
+        widget.urlEdit.setStyleSheet("")
 
 
 class AnalyzeWorker(QThread):
@@ -288,6 +342,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._connect_signals()
         self._load_api_key()
+        self._load_saved_urls()
         self._load_channels()
 
     @staticmethod
@@ -329,6 +384,19 @@ class MainWindow(QMainWindow):
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
 
+    def _save_urls(self) -> None:
+        self._db.clear_saved_urls()
+        for url in self.urlList.get_urls():
+            if url:
+                self._db.add_saved_url(url)
+
+    def _load_saved_urls(self) -> None:
+        urls = self._db.get_saved_urls()
+        for url in urls:
+            row = UrlRow(url)
+            row.removed.connect(self.urlList._on_row_removed)
+            self.urlList._rows_layout.insertWidget(self.urlList._rows_layout.count() - 1, row)
+
     def _build_ui(self) -> None:
         central = QWidget()
         self.setCentralWidget(central)
@@ -339,7 +407,7 @@ class MainWindow(QMainWindow):
         top_layout = QHBoxLayout()
 
         self.urlList = UrlListWidget()
-        self.urlList.setMaximumWidth(650)
+        self.urlList.setMaximumWidth(675)
         top_layout.addWidget(self.urlList)
 
         right_layout = QVBoxLayout()
@@ -442,6 +510,17 @@ class MainWindow(QMainWindow):
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         self.channelsTable.setItem(row, col, item)
 
+    def _delete_channel_by_url(self, url: str) -> None:
+        channels = self._db.get_channels()
+        ch = next((c for c in channels if c.url == url), None)
+        if ch:
+            self._db.delete_channel(ch.id)
+            self._load_channels()
+            self.videosTable.setRowCount(0)
+            if HAS_MATPLOTLIB and self._chart_fig is not None:
+                self._chart_fig.clear()
+                self._chart_canvas.draw()
+
     @Slot(int, int, int, int)
     def _on_channel_selected(self, row: int, _col: int, _prev_row: int, _prev_col: int) -> None:
         if row < 0:
@@ -450,6 +529,7 @@ class MainWindow(QMainWindow):
         if row >= len(channels):
             return
         ch = channels[row]
+        self.urlList.highlight_url(ch.url)
         self._load_videos(ch.id)
         self._load_chart(ch.id)
 

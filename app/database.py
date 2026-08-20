@@ -50,6 +50,11 @@ class Database:
                     Likes INTEGER NOT NULL DEFAULT 0,
                     Comments INTEGER NOT NULL DEFAULT 0
                 );
+                CREATE TABLE IF NOT EXISTS SavedUrls(
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Url TEXT UNIQUE NOT NULL,
+                    CreatedAt TEXT
+                );
                 """
             )
 
@@ -161,6 +166,27 @@ class Database:
             )
             for r in rows
         ]
+
+    def add_saved_url(self, url: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO SavedUrls(Url,CreatedAt) VALUES(?,?)",
+                (url, now),
+            )
+
+    def get_saved_urls(self) -> list[str]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT Url FROM SavedUrls ORDER BY CreatedAt").fetchall()
+        return [r["Url"] for r in rows]
+
+    def remove_saved_url(self, url: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM SavedUrls WHERE Url=?", (url,))
+
+    def clear_saved_urls(self) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM SavedUrls")
 
     @staticmethod
     def _parse_date(value: str | None) -> datetime | None:

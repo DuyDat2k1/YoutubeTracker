@@ -128,10 +128,14 @@ QTableWidget::item {
 QTableWidget::item:selected {
     background-color: #4361ee;
     color: white;
+    border: none;
+    outline: none;
 }
 
 QTableWidget::item:hover {
-    background-color: #f1f5f9;
+    background-color: transparent;
+    border: none;
+    outline: none;
 }
 
 QHeaderView::section {

@@ -526,6 +526,7 @@ class MainWindow(QMainWindow):
 
     def _load_channels(self) -> None:
         channels = self._db.get_channels()
+        self.channelsTable.blockSignals(True)
         self.channelsTable.setRowCount(len(channels))
         self.channelsTable.setColumnCount(7)
         headers = ["TITLE", "CHANNEL ID", "SUBSCRIBERS", "VIDEOS", "VIEWS", "PUBLISHED", "LAST CHECKED"]
@@ -550,6 +551,7 @@ class MainWindow(QMainWindow):
             self._set_cell(row, 4, f"{ch.view_count:,}")
             self._set_cell(row, 5, ch.published_at.strftime("%Y-%m-%d") if ch.published_at else "")
             self._set_cell(row, 6, ch.last_checked.strftime("%Y-%m-%d %H:%M") if ch.last_checked else "")
+        self.channelsTable.blockSignals(False)
 
     def _set_cell(self, row: int, col: int, text: str) -> None:
         item = QTableWidgetItem(text)
@@ -561,7 +563,10 @@ class MainWindow(QMainWindow):
         ch = next((c for c in channels if c.url == url), None)
         if ch:
             self._db.delete_channel(ch.id)
+            self.channelsTable.blockSignals(True)
             self._load_channels()
+            self.channelsTable.blockSignals(False)
+            self.channelsTable.clearSelection()
             self.videosTable.setRowCount(0)
             if HAS_MATPLOTLIB and self._chart_fig is not None:
                 self._chart_fig.clear()
@@ -660,7 +665,14 @@ class MainWindow(QMainWindow):
     def _on_analyze_done(self, ok: int, total: int) -> None:
         self.analyzeBtn.setEnabled(True)
         self._progress_widget.finish()
+        self.channelsTable.blockSignals(True)
         self._load_channels()
+        self.channelsTable.blockSignals(False)
+        self.channelsTable.clearSelection()
+        self.videosTable.setRowCount(0)
+        if HAS_MATPLOTLIB and self._chart_fig is not None:
+            self._chart_fig.clear()
+            self._chart_canvas.draw()
 
     @Slot(str)
     def _on_analyze_error(self, msg: str) -> None:

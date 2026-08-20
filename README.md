@@ -9,6 +9,7 @@
 - Xem kết quả ở các tab: **Channels**, **3 Latest Videos**, **Subscriber Trend**
 - **Import CSV** để thêm hàng loạt URL kênh
 - **Export CSV** để xuất kết quả
+- Tìm kiếm channel theo title (real-time)
 - Lưu API key được mã hóa vào file config
 
 ## Yêu cầu
@@ -25,12 +26,16 @@ pip install -r requirements.txt
 
 ## Chạy trực tiếp (Khuyến nghị)
 
+### Cách 1: Dùng file run.bat (Khuyến nghị)
+
+Double-click file `run.bat` trong thư mục project. Terminal sẽ giữ mở để bạn đọc lỗi nếu có.
+
+### Cách 2: Chạy bằng lệnh
+
 ```bash
 cd YouTubeTracker
 python -m app.main
 ```
-
-Hoặc double-click file `run.py` nếu có.
 
 ## Chạy bằng Docker
 
@@ -83,6 +88,7 @@ YouTubeTracker/
 ├── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml
+├── run.bat                  # File chạy app (double-click)
 └── .gitignore
 ```
 

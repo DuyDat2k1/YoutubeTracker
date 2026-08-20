@@ -5,7 +5,7 @@ import csv
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Qt, Signal, Slot, QTimer
+from PySide6.QtCore import QEvent, QThread, Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFileDialog, QGroupBox, QHeaderView, QHBoxLayout, QLabel, QLineEdit,
@@ -98,7 +98,7 @@ class UrlRow(QWidget):
         self.urlEdit.setMinimumHeight(32)
         layout.addWidget(self.urlEdit, 1)
 
-        self.removeBtn = QPushButton("✕")
+        self.removeBtn = QPushButton("X")
         self.removeBtn.setFixedWidth(36)
         self.removeBtn.setFixedHeight(32)
         self.removeBtn.setStyleSheet("""
@@ -108,7 +108,8 @@ class UrlRow(QWidget):
                 border: none;
                 border-radius: 6px;
                 font-weight: bold;
-                font-size: 14px;
+                font-size: 16px;
+                font-family: Arial;
             }
             QPushButton:hover { background-color: #c0392b; }
             QPushButton:pressed { background-color: #a93226; }
@@ -345,6 +346,21 @@ class MainWindow(QMainWindow):
         self._load_saved_urls()
         self._load_channels()
 
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.MouseButtonPress:
+            if not self._is_child_of_table(obj):
+                self.channelsTable.clearSelection()
+                if hasattr(self, 'videosTable'):
+                    self.videosTable.clearSelection()
+        return super().eventFilter(obj, event)
+
+    def _is_child_of_table(self, widget):
+        while widget:
+            if widget in (self.channelsTable,):
+                return True
+            widget = widget.parent()
+        return False
+
     @staticmethod
     def _encrypt_key(key: str) -> str:
         return base64.b64encode(key.encode("utf-8")).decode("utf-8")
@@ -440,6 +456,29 @@ class MainWindow(QMainWindow):
         self.channelsTable.setSelectionBehavior(QTableWidget.SelectRows)
         self.channelsTable.setSelectionMode(QTableWidget.SingleSelection)
         self.channelsTable.setAlternatingRowColors(True)
+        self.channelsTable.setStyleSheet("""
+            QTableWidget { margin: 10px; padding: 10px 10px 10px 30px; }
+            QHeaderView::section {
+                font-family: "Times New Roman";
+                font-size: 10px;
+                font-weight: bold;
+                background-color: #d5dce3;
+                padding: 4px;
+                border: 1px solid #b0b8c1;
+            }
+            QTableWidget::item {
+                padding: 5px;
+                font-size: 8px;
+                white-space: normal;
+                word-wrap: break-word;
+            }
+            QTableWidget::item:selected {
+                color: white;
+            }
+            QTableWidget::item:hover {
+                background-color: transparent;
+            }
+        """)
         self.channelsTable.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
 
         channels_container = QWidget()

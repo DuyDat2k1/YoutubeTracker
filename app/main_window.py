@@ -586,6 +586,7 @@ class MainWindow(QMainWindow):
 
     def _load_videos(self, channel_db_id: int) -> None:
         videos = self._db.get_latest_videos(channel_db_id)
+        self.videosTable.setRowCount(0)
         self.videosTable.setRowCount(len(videos))
         self.videosTable.setColumnCount(5)
         self.videosTable.setHorizontalHeaderLabels(["TITLE", "PUBLISHED", "VIEWS", "LIKES", "COMMENTS"])

@@ -162,6 +162,8 @@ class UrlListWidget(QGroupBox):
         self._rows_layout.setSpacing(4)
         self._rows_layout.addStretch()
 
+        self._highlighted_widget = None
+
         self._scroll.setWidget(self._rows_container)
         main_layout.addWidget(self._scroll)
 
@@ -201,6 +203,7 @@ class UrlListWidget(QGroupBox):
             main_window._save_urls()
 
     def _on_remove_all(self) -> None:
+        self._clear_highlight()
         while self._rows_layout.count() > 1:
             item = self._rows_layout.takeAt(0)
             widget = item.widget()
@@ -211,6 +214,8 @@ class UrlListWidget(QGroupBox):
             main_window._save_urls()
 
     def _on_row_removed(self, row: QWidget) -> None:
+        if self._highlighted_widget is row:
+            self._clear_highlight()
         url = row.urlEdit.text().strip()
         main_window = self._get_main_window()
         if main_window and hasattr(main_window, "_delete_channel_by_url"):
@@ -282,6 +287,7 @@ class UrlListWidget(QGroupBox):
         )
 
     def highlight_url(self, url: str) -> None:
+        self._clear_highlight()
         for i in range(self._rows_layout.count()):
             item = self._rows_layout.itemAt(i)
             widget = item.widget()
@@ -295,11 +301,13 @@ class UrlListWidget(QGroupBox):
                         }
                     """)
                     self._scroll.ensureWidgetVisible(widget)
-                    QTimer.singleShot(2000, lambda w=widget: self._clear_highlight(w))
+                    self._highlighted_widget = widget
                     break
 
-    def _clear_highlight(self, widget: QWidget) -> None:
-        widget.urlEdit.setStyleSheet("")
+    def _clear_highlight(self) -> None:
+        if self._highlighted_widget is not None:
+            self._highlighted_widget.urlEdit.setStyleSheet("")
+            self._highlighted_widget = None
 
 
 class AnalyzeWorker(QThread):

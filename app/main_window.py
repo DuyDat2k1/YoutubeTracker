@@ -594,6 +594,7 @@ class MainWindow(QMainWindow):
         self.urlList.highlight_url(ch.url)
         self._load_videos(ch.id)
         self._load_chart(ch.id)
+        self.tabWidget.setCurrentIndex(1)
         self.channelsTable.selectRow(row)
 
     @Slot(int, int, int, int)

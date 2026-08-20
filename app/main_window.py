@@ -510,7 +510,7 @@ class MainWindow(QMainWindow):
         self.searchBtn = QPushButton("Search")
         self.searchBtn.setFixedWidth(100)
         self.searchBtn.clicked.connect(self._on_search_channels)
-        self.searchInput.returnPressed.connect(self._on_search_channels)
+        self.searchInput.textChanged.connect(self._on_search_channels)
         search_row.addWidget(self.searchInput)
         search_row.addWidget(self.searchBtn)
         channels_layout.addLayout(search_row)

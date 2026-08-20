@@ -87,6 +87,29 @@ class Database:
             for r in rows
         ]
 
+    def search_channels(self, query: str) -> list[ChannelModel]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT Id,ChannelId,Title,Url,Subscribers,VideoCount,ViewCount,"
+                "PublishedAt,LastChecked FROM Channels "
+                "WHERE Title LIKE ? ORDER BY Title",
+                (f"%{query}%",),
+            ).fetchall()
+        return [
+            ChannelModel(
+                id=r["Id"],
+                channel_id=r["ChannelId"],
+                title=r["Title"],
+                url=r["Url"],
+                subscribers=r["Subscribers"],
+                video_count=r["VideoCount"],
+                view_count=r["ViewCount"],
+                published_at=self._parse_date(r["PublishedAt"]),
+                last_checked=self._parse_date(r["LastChecked"]),
+            )
+            for r in rows
+        ]
+
     def upsert_channel(self, ch: ChannelModel) -> int:
         pub = ch.published_at.isoformat() if ch.published_at else None
         chk = ch.last_checked.isoformat() if ch.last_checked else None

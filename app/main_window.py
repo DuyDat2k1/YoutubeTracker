@@ -501,7 +501,20 @@ class MainWindow(QMainWindow):
         channels_container = QWidget()
         channels_layout = QVBoxLayout(channels_container)
         channels_layout.setContentsMargins(0, 0, 0, 0)
-        channels_layout.setSpacing(0)
+        channels_layout.setSpacing(6)
+
+        search_row = QHBoxLayout()
+        search_row.setContentsMargins(8, 4, 8, 4)
+        self.searchInput = QLineEdit()
+        self.searchInput.setPlaceholderText("Search by channel title...")
+        self.searchBtn = QPushButton("Search")
+        self.searchBtn.setFixedWidth(100)
+        self.searchBtn.clicked.connect(self._on_search_channels)
+        self.searchInput.returnPressed.connect(self._on_search_channels)
+        search_row.addWidget(self.searchInput)
+        search_row.addWidget(self.searchBtn)
+        channels_layout.addLayout(search_row)
+
         self._progress_widget = ProgressWidget()
         channels_layout.addWidget(self._progress_widget)
         channels_layout.addWidget(self.channelsTable)
@@ -535,8 +548,9 @@ class MainWindow(QMainWindow):
         self.videosTable.currentCellChanged.connect(self._on_video_selected)
         self.urlList.imported.connect(self._on_analyze)
 
-    def _load_channels(self) -> None:
-        channels = self._db.get_channels()
+    def _load_channels(self, channels: list | None = None) -> None:
+        if channels is None:
+            channels = self._db.get_channels()
         self.channelsTable.blockSignals(True)
         self.channelsTable.setRowCount(len(channels))
         self.channelsTable.setColumnCount(7)
@@ -563,6 +577,15 @@ class MainWindow(QMainWindow):
             self._set_cell(self.channelsTable, row, 5, ch.published_at.strftime("%Y-%m-%d") if ch.published_at else "")
             self._set_cell(self.channelsTable, row, 6, ch.last_checked.strftime("%Y-%m-%d %H:%M") if ch.last_checked else "")
         self.channelsTable.blockSignals(False)
+
+    @Slot()
+    def _on_search_channels(self) -> None:
+        query = self.searchInput.text().strip()
+        if not query:
+            self._load_channels()
+            return
+        channels = self._db.search_channels(query)
+        self._load_channels(channels)
 
     def _set_cell(self, table: QTableWidget, row: int, col: int, text: str) -> None:
         item = QTableWidgetItem(text)

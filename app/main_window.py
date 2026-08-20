@@ -334,6 +334,8 @@ class AnalyzeWorker(QThread):
                 self._db.add_snapshot(db_id, ch.subscribers)
                 latest = self._yt.get_latest_videos(ch.channel_id, db_id)
                 self._db.upsert_videos(latest)
+                for v in latest:
+                    self._db.add_video_snapshot(v.video_id, v.views, v.likes, v.comments)
                 ok += 1
             self.finished.emit(ok, total)
         except Exception as e:
@@ -517,7 +519,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.tabWidget)
 
         if HAS_MATPLOTLIB:
-            self._chart_fig = Figure(figsize=(8, 4), dpi=100)
+            self._chart_fig = Figure(figsize=(8, 10), dpi=100)
             self._chart_canvas = FigureCanvasQTAgg(self._chart_fig)
             layout = QVBoxLayout(chart_tab)
             layout.addWidget(self._chart_canvas)
@@ -530,6 +532,7 @@ class MainWindow(QMainWindow):
         self.settingsBtn.clicked.connect(self._on_settings)
         self.exportBtn.clicked.connect(self._on_export)
         self.channelsTable.currentCellChanged.connect(self._on_channel_selected)
+        self.videosTable.currentCellChanged.connect(self._on_video_selected)
         self.urlList.imported.connect(self._on_analyze)
 
     def _load_channels(self) -> None:
@@ -591,8 +594,21 @@ class MainWindow(QMainWindow):
         self.urlList.highlight_url(ch.url)
         self._load_videos(ch.id)
         self._load_chart(ch.id)
-        self.tabWidget.setCurrentIndex(1)
         self.channelsTable.selectRow(row)
+
+    @Slot(int, int, int, int)
+    def _on_video_selected(self, row: int, _col: int, _prev_row: int, _prev_col: int) -> None:
+        if row < 0:
+            return
+        title_item = self.videosTable.item(row, 0)
+        if title_item is None:
+            return
+        video_data = title_item.data(Qt.UserRole)
+        if not video_data or "video_id" not in video_data:
+            return
+        vid = video_data["video_id"]
+        self._load_video_chart(vid)
+        self.tabWidget.setCurrentIndex(2)
 
     def _load_videos(self, channel_db_id: int) -> None:
         videos = self._db.get_latest_videos(channel_db_id)
@@ -613,7 +629,10 @@ class MainWindow(QMainWindow):
         self.videosTable.horizontalHeader().setFont(vfont)
 
         for row, v in enumerate(videos):
-            self._set_cell(self.videosTable, row, 0, v.title)
+            title_item = QTableWidgetItem(v.title)
+            title_item.setData(Qt.UserRole, {"video_id": v.video_id})
+            title_item.setFlags(title_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.videosTable.setItem(row, 0, title_item)
             self._set_cell(self.videosTable, row, 1, v.published_at.strftime("%Y-%m-%d") if v.published_at else "")
             self._set_cell(self.videosTable, row, 2, f"{v.views:,}")
             self._set_cell(self.videosTable, row, 3, f"{v.likes:,}")
@@ -637,6 +656,47 @@ class MainWindow(QMainWindow):
         else:
             ax.text(0.5, 0.5, "No data available", ha="center", va="center", transform=ax.transAxes)
 
+        self._chart_canvas.draw()
+
+    def _load_video_chart(self, video_id: str) -> None:
+        if not HAS_MATPLOTLIB or self._chart_fig is None:
+            return
+        history = self._db.get_video_history(video_id, days=7)
+        self._chart_fig.clear()
+
+        if not history:
+            ax = self._chart_fig.add_subplot(111)
+            ax.text(0.5, 0.5, "No data available for this video", ha="center", va="center", transform=ax.transAxes)
+            self._chart_canvas.draw()
+            return
+
+        dates = [h["captured_at"] for h in history if h["captured_at"]]
+        views = [h["views"] for h in history]
+        likes = [h["likes"] for h in history]
+        comments = [h["comments"] for h in history]
+
+        ax1 = self._chart_fig.add_subplot(311)
+        ax1.plot(dates, views, marker="o", color="#4361ee", linewidth=2)
+        ax1.set_title("Views (7 days)")
+        ax1.set_ylabel("Views")
+        ax1.grid(True, alpha=0.3)
+        self._chart_fig.autofmt_xdate()
+
+        ax2 = self._chart_fig.add_subplot(312)
+        ax2.plot(dates, likes, marker="s", color="#e74c3c", linewidth=2)
+        ax2.set_title("Likes (7 days)")
+        ax2.set_ylabel("Likes")
+        ax2.grid(True, alpha=0.3)
+        self._chart_fig.autofmt_xdate()
+
+        ax3 = self._chart_fig.add_subplot(313)
+        ax3.plot(dates, comments, marker="^", color="#2ecc71", linewidth=2)
+        ax3.set_title("Comments (7 days)")
+        ax3.set_ylabel("Comments")
+        ax3.grid(True, alpha=0.3)
+        self._chart_fig.autofmt_xdate()
+
+        self._chart_fig.tight_layout()
         self._chart_canvas.draw()
 
     @Slot()

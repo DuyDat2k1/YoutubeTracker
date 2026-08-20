@@ -50,6 +50,14 @@ class Database:
                     Likes INTEGER NOT NULL DEFAULT 0,
                     Comments INTEGER NOT NULL DEFAULT 0
                 );
+                CREATE TABLE IF NOT EXISTS VideoHistory(
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    VideoId TEXT NOT NULL,
+                    CapturedAt TEXT NOT NULL,
+                    Views INTEGER NOT NULL DEFAULT 0,
+                    Likes INTEGER NOT NULL DEFAULT 0,
+                    Comments INTEGER NOT NULL DEFAULT 0
+                );
                 CREATE TABLE IF NOT EXISTS SavedUrls(
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     Url TEXT UNIQUE NOT NULL,
@@ -143,9 +151,34 @@ class Database:
                         Title=excluded.Title, PublishedAt=excluded.PublishedAt,
                         Views=excluded.Views, Likes=excluded.Likes, Comments=excluded.Comments
                     """,
-                    (v.video_id, v.channel_db_id, v.title, pub,
+                (v.video_id, v.channel_db_id, v.title, pub,
                      v.views, v.likes, v.comments),
-                )
+                 )
+
+    def add_video_snapshot(self, video_id: str, views: int, likes: int, comments: int) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO VideoHistory(VideoId,CapturedAt,Views,Likes,Comments) VALUES(?,?,?,?,?)",
+                (video_id, now, views, likes, comments),
+            )
+
+    def get_video_history(self, video_id: str, days: int = 7) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT CapturedAt,Views,Likes,Comments FROM VideoHistory "
+                "WHERE VideoId=? AND CapturedAt >= datetime('now', ?) ORDER BY CapturedAt",
+                (video_id, f"-{days} days"),
+            ).fetchall()
+        return [
+            {
+                "captured_at": self._parse_date(r["CapturedAt"]),
+                "views": r["Views"],
+                "likes": r["Likes"],
+                "comments": r["Comments"],
+            }
+            for r in rows
+        ]
 
     def get_latest_videos(self, channel_db_id: int, take: int = 3) -> list[VideoModel]:
         with self._connect() as conn:

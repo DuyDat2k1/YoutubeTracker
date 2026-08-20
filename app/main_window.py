@@ -544,19 +544,19 @@ class MainWindow(QMainWindow):
         self.channelsTable.horizontalHeader().setFont(font)
 
         for row, ch in enumerate(channels):
-            self._set_cell(row, 0, ch.title)
-            self._set_cell(row, 1, ch.channel_id)
-            self._set_cell(row, 2, f"{ch.subscribers:,}")
-            self._set_cell(row, 3, f"{ch.video_count:,}")
-            self._set_cell(row, 4, f"{ch.view_count:,}")
-            self._set_cell(row, 5, ch.published_at.strftime("%Y-%m-%d") if ch.published_at else "")
-            self._set_cell(row, 6, ch.last_checked.strftime("%Y-%m-%d %H:%M") if ch.last_checked else "")
+            self._set_cell(self.channelsTable, row, 0, ch.title)
+            self._set_cell(self.channelsTable, row, 1, ch.channel_id)
+            self._set_cell(self.channelsTable, row, 2, f"{ch.subscribers:,}")
+            self._set_cell(self.channelsTable, row, 3, f"{ch.video_count:,}")
+            self._set_cell(self.channelsTable, row, 4, f"{ch.view_count:,}")
+            self._set_cell(self.channelsTable, row, 5, ch.published_at.strftime("%Y-%m-%d") if ch.published_at else "")
+            self._set_cell(self.channelsTable, row, 6, ch.last_checked.strftime("%Y-%m-%d %H:%M") if ch.last_checked else "")
         self.channelsTable.blockSignals(False)
 
-    def _set_cell(self, row: int, col: int, text: str) -> None:
+    def _set_cell(self, table: QTableWidget, row: int, col: int, text: str) -> None:
         item = QTableWidgetItem(text)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        self.channelsTable.setItem(row, col, item)
+        table.setItem(row, col, item)
 
     def _delete_channel_by_url(self, url: str) -> None:
         channels = self._db.get_channels()
@@ -604,11 +604,11 @@ class MainWindow(QMainWindow):
         self.videosTable.horizontalHeader().setFont(vfont)
 
         for row, v in enumerate(videos):
-            self._set_cell(row, 0, v.title)
-            self._set_cell(row, 1, v.published_at.strftime("%Y-%m-%d") if v.published_at else "")
-            self._set_cell(row, 2, f"{v.views:,}")
-            self._set_cell(row, 3, f"{v.likes:,}")
-            self._set_cell(row, 4, f"{v.comments:,}")
+            self._set_cell(self.videosTable, row, 0, v.title)
+            self._set_cell(self.videosTable, row, 1, v.published_at.strftime("%Y-%m-%d") if v.published_at else "")
+            self._set_cell(self.videosTable, row, 2, f"{v.views:,}")
+            self._set_cell(self.videosTable, row, 3, f"{v.likes:,}")
+            self._set_cell(self.videosTable, row, 4, f"{v.comments:,}")
 
     def _load_chart(self, channel_db_id: int) -> None:
         if not HAS_MATPLOTLIB or self._chart_fig is None:

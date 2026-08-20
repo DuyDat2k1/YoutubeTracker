@@ -636,6 +636,7 @@ class MainWindow(QMainWindow):
 
     def _load_videos(self, channel_db_id: int) -> None:
         videos = self._db.get_latest_videos(channel_db_id)
+        self.videosTable.blockSignals(True)
         self.videosTable.setRowCount(0)
         self.videosTable.setRowCount(len(videos))
         self.videosTable.setColumnCount(5)
@@ -661,6 +662,7 @@ class MainWindow(QMainWindow):
             self._set_cell(self.videosTable, row, 2, f"{v.views:,}")
             self._set_cell(self.videosTable, row, 3, f"{v.likes:,}")
             self._set_cell(self.videosTable, row, 4, f"{v.comments:,}")
+        self.videosTable.blockSignals(False)
 
     def _load_chart(self, channel_db_id: int) -> None:
         if not HAS_MATPLOTLIB or self._chart_fig is None:

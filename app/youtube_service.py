@@ -151,3 +151,24 @@ class YouTubeService:
         except Exception:
             msg = f"HTTP {resp.status_code}"
         raise RuntimeError(f"YouTube API error: {msg}")
+
+    def get_video_stats(self, video_id: str) -> dict | None:
+        if not self.is_configured:
+            return None
+        resp = self._session.get(
+            f"{BASE}/videos",
+            params={"part": "snippet,statistics", "id": video_id, "key": self._api_key},
+            timeout=30,
+        )
+        if not resp.ok:
+            return None
+        items = resp.json().get("items", [])
+        if not items:
+            return None
+        item = items[0]
+        st = item.get("statistics", {})
+        return {
+            "views": int(st.get("viewCount", 0)),
+            "likes": int(st.get("likeCount", 0)),
+            "comments": int(st.get("commentCount", 0)),
+        }

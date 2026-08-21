@@ -508,6 +508,7 @@ class MainWindow(QMainWindow):
             QTableWidget::item:selected {
                 background-color: #4361ee;
                 color: white;
+                border: none;
             }
             QTableWidget::item:hover {
                 background-color: #e8eaf6;
@@ -516,8 +517,10 @@ class MainWindow(QMainWindow):
             QTableWidget::item:selected:hover {
                 background-color: #4361ee;
                 color: white;
+                border: none;
             }
         """)
+        self.videosTable.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
         self.videosTable.setColumnCount(5)
         self.videosTable.setHorizontalHeaderLabels(["TITLE", "PUBLISHED", "VIEWS", "LIKES", "COMMENTS"])
         self.videosTable.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
@@ -556,6 +559,7 @@ class MainWindow(QMainWindow):
             QTableWidget::item:selected {
                 background-color: #4361ee;
                 color: white;
+                border: none;
             }
             QTableWidget::item:hover {
                 background-color: #e8eaf6;
@@ -564,6 +568,7 @@ class MainWindow(QMainWindow):
             QTableWidget::item:selected:hover {
                 background-color: #4361ee;
                 color: white;
+                border: none;
             }
         """)
         self.channelsTable.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
@@ -596,7 +601,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.tabWidget)
 
         if HAS_MATPLOTLIB:
-            self._chart_fig = Figure(figsize=(8, 10), dpi=100)
+            self._chart_fig = Figure(figsize=(12, 4), dpi=100)
             self._chart_canvas = FigureCanvasQTAgg(self._chart_fig)
             layout = QVBoxLayout(chart_tab)
             layout.addWidget(self._chart_canvas)
@@ -702,6 +707,9 @@ class MainWindow(QMainWindow):
         if not video_data or "video_id" not in video_data:
             return
         vid = video_data["video_id"]
+        stats = self._yt.get_video_stats(vid)
+        if stats and not self._db.has_today_snapshot(vid):
+            self._db.add_video_snapshot(vid, stats["views"], stats["likes"], stats["comments"])
         self._load_video_chart(vid)
         self.tabWidget.setCurrentIndex(2)
 
@@ -776,21 +784,21 @@ class MainWindow(QMainWindow):
         likes = [h["likes"] for h in history]
         comments = [h["comments"] for h in history]
 
-        ax1 = self._chart_fig.add_subplot(311)
+        ax1 = self._chart_fig.add_subplot(131)
         ax1.plot(dates, views, marker="o", color="#4361ee", linewidth=2)
         ax1.set_title("Views (7 days)")
         ax1.set_ylabel("Views")
         ax1.grid(True, alpha=0.3)
         self._chart_fig.autofmt_xdate()
 
-        ax2 = self._chart_fig.add_subplot(312)
+        ax2 = self._chart_fig.add_subplot(132)
         ax2.plot(dates, likes, marker="s", color="#e74c3c", linewidth=2)
         ax2.set_title("Likes (7 days)")
         ax2.set_ylabel("Likes")
         ax2.grid(True, alpha=0.3)
         self._chart_fig.autofmt_xdate()
 
-        ax3 = self._chart_fig.add_subplot(313)
+        ax3 = self._chart_fig.add_subplot(133)
         ax3.plot(dates, comments, marker="^", color="#2ecc71", linewidth=2)
         ax3.set_title("Comments (7 days)")
         ax3.set_ylabel("Comments")

@@ -190,6 +190,15 @@ class Database:
                 (video_id, now, views, likes, comments),
             )
 
+    def has_today_snapshot(self, video_id: str) -> bool:
+        today = datetime.now(timezone.utc).date().isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT Id FROM VideoHistory WHERE VideoId=? AND CapturedAt >= ?",
+                (video_id, today),
+            ).fetchone()
+        return row is not None
+
     def get_video_history(self, video_id: str, days: int = 7) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(

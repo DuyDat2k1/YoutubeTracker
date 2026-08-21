@@ -574,7 +574,7 @@ class MainWindow(QMainWindow):
             self._set_cell(self.channelsTable, row, 2, f"{ch.subscribers:,}")
             self._set_cell(self.channelsTable, row, 3, f"{ch.video_count:,}")
             self._set_cell(self.channelsTable, row, 4, f"{ch.view_count:,}")
-            self._set_cell(self.channelsTable, row, 5, ch.published_at.strftime("%Y-%m-%d") if ch.published_at else "")
+            self._set_cell(self.channelsTable, row, 5, ch.published_at.strftime("%Y-%m-%d %H:%M") if ch.published_at else "")
             self._set_cell(self.channelsTable, row, 6, ch.last_checked.strftime("%Y-%m-%d %H:%M") if ch.last_checked else "")
         self.channelsTable.blockSignals(False)
 
@@ -658,7 +658,7 @@ class MainWindow(QMainWindow):
             title_item.setData(Qt.UserRole, {"video_id": v.video_id})
             title_item.setFlags(title_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.videosTable.setItem(row, 0, title_item)
-            self._set_cell(self.videosTable, row, 1, v.published_at.strftime("%Y-%m-%d") if v.published_at else "")
+            self._set_cell(self.videosTable, row, 1, v.published_at.strftime("%Y-%m-%d %H:%M") if v.published_at else "")
             self._set_cell(self.videosTable, row, 2, f"{v.views:,}")
             self._set_cell(self.videosTable, row, 3, f"{v.likes:,}")
             self._set_cell(self.videosTable, row, 4, f"{v.comments:,}")

@@ -368,6 +368,13 @@ class MainWindow(QMainWindow):
             self._status_label.setText("Auto-refresh: OFF")
             self._status_label.setStyleSheet("color: #7f8c8d; font-size: 10px; padding: 4px;")
 
+    def closeEvent(self, event) -> None:
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.quit()
+            self._worker.wait(3000)
+        self._auto_refresh_timer.stop()
+        super().closeEvent(event)
+
     def eventFilter(self, obj, event):
         if event.type() == QEvent.MouseButtonPress:
             if not self._is_child_of_table(obj):
@@ -516,7 +523,7 @@ class MainWindow(QMainWindow):
                 padding: 5px;
                 font-size: 8px;
                 white-space: normal;
-                word-wrap: break-word;
+                word-break: break-word;
                 color: black;
             }
             QTableWidget::item:selected {
@@ -567,7 +574,7 @@ class MainWindow(QMainWindow):
                 padding: 5px;
                 font-size: 8px;
                 white-space: normal;
-                word-wrap: break-word;
+                word-break: break-word;
                 color: black;
             }
             QTableWidget::item:selected {

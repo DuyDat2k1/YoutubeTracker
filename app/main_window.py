@@ -369,10 +369,10 @@ class MainWindow(QMainWindow):
             self._status_label.setStyleSheet("color: #7f8c8d; font-size: 10px; padding: 4px;")
 
     def closeEvent(self, event) -> None:
+        self._auto_refresh_timer.stop()
         if self._worker is not None and self._worker.isRunning():
             self._worker.quit()
             self._worker.wait(3000)
-        self._auto_refresh_timer.stop()
         super().closeEvent(event)
 
     def eventFilter(self, obj, event):
@@ -870,6 +870,8 @@ class MainWindow(QMainWindow):
         self._start_analysis(urls)
 
     def _start_analysis(self, urls: list[str]) -> None:
+        if self._worker is not None and self._worker.isRunning():
+            return
         self.analyzeBtn.setEnabled(False)
         self._progress_widget.start(len(urls))
 
@@ -904,6 +906,9 @@ class MainWindow(QMainWindow):
         if self._auto_refresh_timer.isActive():
             self._status_label.setText("Auto-refresh: ON (every 1s)")
             self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
+        if self._worker is not None:
+            self._worker.deleteLater()
+            self._worker = None
 
     @Slot(str)
     def _on_analyze_error(self, msg: str) -> None:
@@ -913,6 +918,9 @@ class MainWindow(QMainWindow):
         if self._auto_refresh_timer.isActive():
             self._status_label.setText("Auto-refresh: ON (every 1s)")
             self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
+        if self._worker is not None:
+            self._worker.deleteLater()
+            self._worker = None
 
     @Slot()
     def _on_settings(self) -> None:

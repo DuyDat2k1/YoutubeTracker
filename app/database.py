@@ -87,6 +87,32 @@ class Database:
             for r in rows
         ]
 
+    def get_channels_by_urls(self, urls: list[str]) -> list[ChannelModel]:
+        if not urls:
+            return []
+        placeholders = ",".join("?" for _ in urls)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT Id,ChannelId,Title,Url,Subscribers,VideoCount,ViewCount,"
+                f"PublishedAt,LastChecked FROM Channels WHERE Url IN ({placeholders}) "
+                f"ORDER BY Title",
+                urls,
+            ).fetchall()
+        return [
+            ChannelModel(
+                id=r["Id"],
+                channel_id=r["ChannelId"],
+                title=r["Title"],
+                url=r["Url"],
+                subscribers=r["Subscribers"],
+                video_count=r["VideoCount"],
+                view_count=r["ViewCount"],
+                published_at=self._parse_date(r["PublishedAt"]),
+                last_checked=self._parse_date(r["LastChecked"]),
+            )
+            for r in rows
+        ]
+
     def search_channels(self, query: str) -> list[ChannelModel]:
         with self._connect() as conn:
             rows = conn.execute(

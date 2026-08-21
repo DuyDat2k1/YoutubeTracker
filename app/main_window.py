@@ -360,7 +360,6 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._load_api_key()
         self._load_saved_urls()
-        self._load_channels()
 
     def closeEvent(self, event) -> None:
         if self._worker is not None:
@@ -437,6 +436,9 @@ class MainWindow(QMainWindow):
             row = UrlRow(url)
             row.removed.connect(self.urlList._on_row_removed)
             self.urlList._rows_layout.insertWidget(self.urlList._rows_layout.count() - 1, row)
+        if urls:
+            channels = self._db.get_channels_by_urls(urls)
+            self._load_channels(channels)
 
     def _build_ui(self) -> None:
         central = QWidget()

@@ -523,7 +523,7 @@ class MainWindow(QMainWindow):
                 padding: 5px;
                 font-size: 8px;
                 white-space: normal;
-                word-break: break-word;
+
                 color: black;
             }
             QTableWidget::item:selected {
@@ -574,7 +574,7 @@ class MainWindow(QMainWindow):
                 padding: 5px;
                 font-size: 8px;
                 white-space: normal;
-                word-break: break-word;
+
                 color: black;
             }
             QTableWidget::item:selected {

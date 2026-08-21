@@ -333,6 +333,7 @@ class AnalyzeWorker(QThread):
                 db_id = self._db.upsert_channel(ch)
                 self._db.add_snapshot(db_id, ch.subscribers)
                 latest = self._yt.get_latest_videos(ch.channel_id, db_id)
+                self._db.delete_channel_videos(db_id)
                 self._db.upsert_videos(latest)
                 for v in latest:
                     self._db.add_video_snapshot(v.video_id, v.views, v.likes, v.comments)

@@ -138,6 +138,10 @@ class Database:
             conn.execute("DELETE FROM SubscriberHistory WHERE ChannelDbId=?", (channel_db_id,))
             conn.execute("DELETE FROM Channels WHERE Id=?", (channel_db_id,))
 
+    def delete_channel_videos(self, channel_db_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM Videos WHERE ChannelDbId=?", (channel_db_id,))
+
     def add_snapshot(self, channel_db_id: int, subscribers: int) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:

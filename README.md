@@ -6,7 +6,7 @@
 
 - Thêm danh sách URL kênh YouTube ở panel bên trái
 - Click **ANALYZE** để lấy dữ liệu qua YouTube API
-- Xem kết quả ở các tab: **Channels**, **3 Latest Videos**, **Subscriber Trend**
+- Xem kết quả ở các tab: **Channels**, **Latest Videos**, **Video Analytics**
 - **Import CSV** để thêm hàng loạt URL kênh
 - **Export CSV** để xuất kết quả
 - Tìm kiếm channel theo title (real-time)

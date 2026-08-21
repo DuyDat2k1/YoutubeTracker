@@ -350,6 +350,7 @@ class MainWindow(QMainWindow):
         self._api_key = ""
         self._yt = YouTubeService("")
         self._worker: AnalyzeWorker | None = None
+        self._current_video_channel_id: int | None = None
 
         self._build_ui()
         self._connect_signals()
@@ -429,7 +430,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
         self.setWindowTitle("YouTube Competitor Tracker")
-        self.resize(1250, 800)
+        self.resize(1400, 900)
 
         top_layout = QHBoxLayout()
 
@@ -437,7 +438,15 @@ class MainWindow(QMainWindow):
         self.urlList.setMaximumWidth(675)
         top_layout.addWidget(self.urlList)
 
-        right_layout = QVBoxLayout()
+        right_section = QWidget()
+        right_section.setFixedWidth(680)
+        right_layout = QVBoxLayout(right_section)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(6)
+
+        right_buttons = QHBoxLayout()
+        right_buttons.setContentsMargins(0, 0, 0, 0)
+        right_buttons.setSpacing(6)
 
         self.analyzeBtn = QPushButton("ANALYZE")
         self.analyzeBtn.setStyleSheet("""
@@ -453,13 +462,73 @@ class MainWindow(QMainWindow):
         """)
         self.settingsBtn = QPushButton("API SETTINGS")
         self.exportBtn = QPushButton("EXPORT CSV")
-        right_layout.addWidget(self.analyzeBtn)
-        right_layout.addWidget(self.settingsBtn)
-        right_layout.addWidget(self.exportBtn)
+        right_buttons.addWidget(self.analyzeBtn)
+        right_buttons.addWidget(self.settingsBtn)
+        right_buttons.addWidget(self.exportBtn)
+        right_layout.addLayout(right_buttons)
 
-        right_layout.addStretch()
+        videos_container = QWidget()
+        videos_layout = QVBoxLayout(videos_container)
+        videos_layout.setContentsMargins(0, 0, 0, 0)
+        videos_layout.setSpacing(6)
 
-        top_layout.addLayout(right_layout)
+        video_search_row = QHBoxLayout()
+        video_search_row.setContentsMargins(8, 4, 8, 4)
+        self.videoSearchInput = QLineEdit()
+        self.videoSearchInput.setPlaceholderText("Search videos...")
+        self.videoSearchBtn = QPushButton("Search")
+        self.videoSearchBtn.setFixedWidth(100)
+        self.videoSearchBtn.clicked.connect(self._on_search_videos)
+        self.videoSearchInput.textChanged.connect(self._on_search_videos)
+        video_search_row.addWidget(self.videoSearchInput)
+        video_search_row.addWidget(self.videoSearchBtn)
+        videos_layout.addLayout(video_search_row)
+
+        self.videosTable = QTableWidget()
+        self.videosTable.setSelectionBehavior(QTableWidget.SelectRows)
+        self.videosTable.setAlternatingRowColors(True)
+        self.videosTable.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
+        self.videosTable.setStyleSheet("""
+            QTableWidget { margin: 10px; padding: 10px 10px 10px 30px; }
+            QHeaderView::section {
+                font-family: "Times New Roman";
+                font-size: 10px;
+                font-weight: bold;
+                background-color: #d5dce3;
+                padding: 4px;
+                border: 1px solid #b0b8c1;
+            }
+            QTableWidget::item {
+                padding: 5px;
+                font-size: 8px;
+                white-space: normal;
+                word-wrap: break-word;
+                color: black;
+            }
+            QTableWidget::item:selected {
+                background-color: #4361ee;
+                color: white;
+            }
+            QTableWidget::item:hover {
+                background-color: #e8eaf6;
+                color: black;
+            }
+            QTableWidget::item:selected:hover {
+                background-color: #4361ee;
+                color: white;
+            }
+        """)
+        self.videosTable.setColumnCount(5)
+        self.videosTable.setHorizontalHeaderLabels(["TITLE", "PUBLISHED", "VIEWS", "LIKES", "COMMENTS"])
+        self.videosTable.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
+        vcol_widths = [345, 125, 125, 125, 125]
+        for col, width in enumerate(vcol_widths):
+            self.videosTable.setColumnWidth(col, width)
+        videos_layout.addWidget(self.videosTable)
+
+        right_layout.addWidget(videos_container)
+
+        top_layout.addWidget(right_section)
         main_layout.addLayout(top_layout)
 
         self.tabWidget = QTabWidget()
@@ -520,12 +589,6 @@ class MainWindow(QMainWindow):
         channels_layout.addWidget(self._progress_widget)
         channels_layout.addWidget(self.channelsTable)
         self.tabWidget.addTab(channels_container, "Channels")
-
-        self.videosTable = QTableWidget()
-        self.videosTable.setSelectionBehavior(QTableWidget.SelectRows)
-        self.videosTable.setAlternatingRowColors(True)
-        self.videosTable.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
-        self.tabWidget.addTab(self.videosTable, "Latest Videos")
 
         chart_tab = QWidget()
         self.tabWidget.addTab(chart_tab, "Video Analytics")
@@ -588,6 +651,13 @@ class MainWindow(QMainWindow):
         channels = self._db.search_channels(query)
         self._load_channels(channels)
 
+    def _on_search_videos(self) -> None:
+        query = self.videoSearchInput.text().strip()
+        if not query:
+            self._load_videos(self._current_video_channel_id)
+            return
+        self._load_videos(self._current_video_channel_id, query)
+
     def _set_cell(self, table: QTableWidget, row: int, col: int, text: str) -> None:
         item = QTableWidgetItem(text)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -616,9 +686,9 @@ class MainWindow(QMainWindow):
             return
         ch = channels[row]
         self.urlList.highlight_url(ch.url)
+        self.videoSearchInput.clear()
         self._load_videos(ch.id)
         self._load_chart(ch.id)
-        self.tabWidget.setCurrentIndex(1)
         self.channelsTable.selectRow(row)
 
     @Slot(int, int, int, int)
@@ -635,8 +705,12 @@ class MainWindow(QMainWindow):
         self._load_video_chart(vid)
         self.tabWidget.setCurrentIndex(2)
 
-    def _load_videos(self, channel_db_id: int) -> None:
+    def _load_videos(self, channel_db_id: int, query: str = "") -> None:
+        self._current_video_channel_id = channel_db_id
         videos = self._db.get_latest_videos(channel_db_id)
+        if query:
+            q = query.lower()
+            videos = [v for v in videos if q in v.title.lower()]
         self.videosTable.blockSignals(True)
         self.videosTable.setRowCount(0)
         self.videosTable.setRowCount(len(videos))

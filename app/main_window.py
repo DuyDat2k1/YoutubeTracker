@@ -603,8 +603,11 @@ class MainWindow(QMainWindow):
         if HAS_MATPLOTLIB:
             self._chart_fig = Figure(figsize=(12, 4), dpi=100)
             self._chart_canvas = FigureCanvasQTAgg(self._chart_fig)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(self._chart_canvas)
             layout = QVBoxLayout(chart_tab)
-            layout.addWidget(self._chart_canvas)
+            layout.addWidget(scroll)
         else:
             self._chart_fig = None
             self._chart_canvas = None
@@ -711,7 +714,7 @@ class MainWindow(QMainWindow):
         if stats and not self._db.has_today_snapshot(vid):
             self._db.add_video_snapshot(vid, stats["views"], stats["likes"], stats["comments"])
         self._load_video_chart(vid)
-        self.tabWidget.setCurrentIndex(2)
+        self.tabWidget.setCurrentIndex(1)
 
     def _load_videos(self, channel_db_id: int, query: str = "") -> None:
         self._current_video_channel_id = channel_db_id

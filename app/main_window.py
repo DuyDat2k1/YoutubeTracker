@@ -352,7 +352,7 @@ class MainWindow(QMainWindow):
         self._worker: AnalyzeWorker | None = None
         self._current_video_channel_id: int | None = None
         self._auto_refresh_timer = QTimer()
-        self._auto_refresh_timer.setInterval(30 * 60 * 1000)
+        self._auto_refresh_timer.setInterval(1000)
         self._auto_refresh_timer.timeout.connect(self._on_auto_refresh)
 
         self._build_ui()
@@ -362,7 +362,7 @@ class MainWindow(QMainWindow):
         self._load_channels()
         if self._yt.is_configured and self.urlList.get_urls():
             self._auto_refresh_timer.start()
-            self._status_label.setText("Auto-refresh: ON (every 30 min)")
+            self._status_label.setText("Auto-refresh: ON (every 1s)")
             self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
         else:
             self._status_label.setText("Auto-refresh: OFF")
@@ -719,9 +719,23 @@ class MainWindow(QMainWindow):
         ch = channels[row]
         self.urlList.highlight_url(ch.url)
         self.videoSearchInput.clear()
-        self._load_videos(ch.id)
+        self._refresh_channel_videos(ch.id, ch.channel_id)
         self._load_chart(ch.id)
         self.channelsTable.selectRow(row)
+
+    def _refresh_channel_videos(self, channel_db_id: int, channel_id: str) -> None:
+        if not self._yt.is_configured:
+            self._load_videos(channel_db_id)
+            return
+        try:
+            latest = self._yt.get_latest_videos(channel_id, channel_db_id)
+            self._db.delete_channel_videos(channel_db_id)
+            self._db.upsert_videos(latest)
+            for v in latest:
+                self._db.add_video_snapshot(v.video_id, v.views, v.likes, v.comments)
+        except Exception:
+            pass
+        self._load_videos(channel_db_id)
 
     @Slot(int, int, int, int)
     def _on_video_selected(self, row: int, _col: int, _prev_row: int, _prev_col: int) -> None:
@@ -881,7 +895,7 @@ class MainWindow(QMainWindow):
             self._chart_fig.clear()
             self._chart_canvas.draw()
         if self._auto_refresh_timer.isActive():
-            self._status_label.setText("Auto-refresh: ON (every 30 min)")
+            self._status_label.setText("Auto-refresh: ON (every 1s)")
             self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
 
     @Slot(str)
@@ -890,7 +904,7 @@ class MainWindow(QMainWindow):
         self._progress_widget.finish()
         QMessageBox.critical(self, "API Error", msg)
         if self._auto_refresh_timer.isActive():
-            self._status_label.setText("Auto-refresh: ON (every 30 min)")
+            self._status_label.setText("Auto-refresh: ON (every 1s)")
             self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
 
     @Slot()

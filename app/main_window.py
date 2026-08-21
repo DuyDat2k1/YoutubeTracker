@@ -351,12 +351,22 @@ class MainWindow(QMainWindow):
         self._yt = YouTubeService("")
         self._worker: AnalyzeWorker | None = None
         self._current_video_channel_id: int | None = None
+        self._auto_refresh_timer = QTimer()
+        self._auto_refresh_timer.setInterval(30 * 60 * 1000)
+        self._auto_refresh_timer.timeout.connect(self._on_auto_refresh)
 
         self._build_ui()
         self._connect_signals()
         self._load_api_key()
         self._load_saved_urls()
         self._load_channels()
+        if self._yt.is_configured and self.urlList.get_urls():
+            self._auto_refresh_timer.start()
+            self._status_label.setText("Auto-refresh: ON (every 30 min)")
+            self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
+        else:
+            self._status_label.setText("Auto-refresh: OFF")
+            self._status_label.setStyleSheet("color: #7f8c8d; font-size: 10px; padding: 4px;")
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.MouseButtonPress:
@@ -431,6 +441,10 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(central)
         self.setWindowTitle("YouTube Competitor Tracker")
         self.resize(1400, 900)
+
+        self._status_label = QLabel("Auto-refresh: OFF")
+        self._status_label.setStyleSheet("color: #7f8c8d; font-size: 10px; padding: 4px;")
+        main_layout.addWidget(self._status_label)
 
         top_layout = QHBoxLayout()
 
@@ -666,6 +680,16 @@ class MainWindow(QMainWindow):
             return
         self._load_videos(self._current_video_channel_id, query)
 
+    def _on_auto_refresh(self) -> None:
+        if not self._yt.is_configured:
+            return
+        urls = self.urlList.get_urls()
+        if not urls:
+            return
+        self._status_label.setText("Auto-refresh: Running...")
+        self._status_label.setStyleSheet("color: #e74c3c; font-size: 10px; padding: 4px;")
+        self._start_analysis(urls)
+
     def _set_cell(self, table: QTableWidget, row: int, col: int, text: str) -> None:
         item = QTableWidgetItem(text)
         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
@@ -856,12 +880,18 @@ class MainWindow(QMainWindow):
         if HAS_MATPLOTLIB and self._chart_fig is not None:
             self._chart_fig.clear()
             self._chart_canvas.draw()
+        if self._auto_refresh_timer.isActive():
+            self._status_label.setText("Auto-refresh: ON (every 30 min)")
+            self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
 
     @Slot(str)
     def _on_analyze_error(self, msg: str) -> None:
         self.analyzeBtn.setEnabled(True)
         self._progress_widget.finish()
         QMessageBox.critical(self, "API Error", msg)
+        if self._auto_refresh_timer.isActive():
+            self._status_label.setText("Auto-refresh: ON (every 30 min)")
+            self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
 
     @Slot()
     def _on_settings(self) -> None:

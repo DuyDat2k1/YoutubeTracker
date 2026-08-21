@@ -326,6 +326,8 @@ class AnalyzeWorker(QThread):
         total = len(self._urls)
         try:
             for idx, url in enumerate(self._urls, start=1):
+                if self.isInterruptionRequested():
+                    return
                 self.progress.emit(f"done|{url}|{idx}")
                 ch = self._yt.get_channel(url)
                 if ch is None:
@@ -338,9 +340,11 @@ class AnalyzeWorker(QThread):
                 for v in latest:
                     self._db.add_video_snapshot(v.video_id, v.views, v.likes, v.comments)
                 ok += 1
-            self.finished.emit(ok, total)
+            if not self.isInterruptionRequested():
+                self.finished.emit(ok, total)
         except Exception as e:
-            self.error.emit(str(e))
+            if not self.isInterruptionRequested():
+                self.error.emit(str(e))
 
 
 class MainWindow(QMainWindow):
@@ -352,7 +356,7 @@ class MainWindow(QMainWindow):
         self._worker: AnalyzeWorker | None = None
         self._current_video_channel_id: int | None = None
         self._auto_refresh_timer = QTimer()
-        self._auto_refresh_timer.setInterval(1000)
+        self._auto_refresh_timer.setInterval(300000)
         self._auto_refresh_timer.timeout.connect(self._on_auto_refresh)
 
         self._build_ui()
@@ -362,7 +366,7 @@ class MainWindow(QMainWindow):
         self._load_channels()
         if self._yt.is_configured and self.urlList.get_urls():
             self._auto_refresh_timer.start()
-            self._status_label.setText("Auto-refresh: ON (every 1s)")
+            self._status_label.setText("Auto-refresh: ON (every 5 min)")
             self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
         else:
             self._status_label.setText("Auto-refresh: OFF")
@@ -370,9 +374,12 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         self._auto_refresh_timer.stop()
-        if self._worker is not None and self._worker.isRunning():
-            self._worker.quit()
-            self._worker.wait(3000)
+        if self._worker is not None:
+            if self._worker.isRunning():
+                self._worker.requestInterruption()
+                self._worker.wait(5000)
+            self._worker.deleteLater()
+            self._worker = None
         super().closeEvent(event)
 
     def eventFilter(self, obj, event):
@@ -871,7 +878,8 @@ class MainWindow(QMainWindow):
 
     def _start_analysis(self, urls: list[str]) -> None:
         if self._worker is not None and self._worker.isRunning():
-            return
+            self._worker.requestInterruption()
+            self._worker.wait(2000)
         self.analyzeBtn.setEnabled(False)
         self._progress_widget.start(len(urls))
 
@@ -904,7 +912,7 @@ class MainWindow(QMainWindow):
             self._chart_fig.clear()
             self._chart_canvas.draw()
         if self._auto_refresh_timer.isActive():
-            self._status_label.setText("Auto-refresh: ON (every 1s)")
+            self._status_label.setText("Auto-refresh: ON (every 5 min)")
             self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
         if self._worker is not None:
             self._worker.deleteLater()
@@ -916,7 +924,7 @@ class MainWindow(QMainWindow):
         self._progress_widget.finish()
         QMessageBox.critical(self, "API Error", msg)
         if self._auto_refresh_timer.isActive():
-            self._status_label.setText("Auto-refresh: ON (every 1s)")
+            self._status_label.setText("Auto-refresh: ON (every 5 min)")
             self._status_label.setStyleSheet("color: #27ae60; font-size: 10px; padding: 4px;")
         if self._worker is not None:
             self._worker.deleteLater()

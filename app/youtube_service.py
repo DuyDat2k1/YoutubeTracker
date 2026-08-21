@@ -52,7 +52,7 @@ class YouTubeService:
             last_checked=datetime.now(timezone.utc),
         )
 
-    def get_latest_videos(self, channel_id: str, db_id: int, take: int = 3) -> list[VideoModel]:
+    def get_latest_videos(self, channel_id: str, db_id: int, take: int = 10) -> list[VideoModel]:
         if not self.is_configured:
             raise RuntimeError("Chua cau hinh YouTube Data API v3 key.")
 

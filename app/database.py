@@ -203,7 +203,7 @@ class Database:
             for r in rows
         ]
 
-    def get_latest_videos(self, channel_db_id: int, take: int = 3) -> list[VideoModel]:
+    def get_latest_videos(self, channel_db_id: int, take: int = 10) -> list[VideoModel]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT VideoId,ChannelDbId,Title,PublishedAt,Views,Likes,Comments "

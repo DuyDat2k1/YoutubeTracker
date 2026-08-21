@@ -524,7 +524,7 @@ class MainWindow(QMainWindow):
         self.videosTable.setSelectionBehavior(QTableWidget.SelectRows)
         self.videosTable.setAlternatingRowColors(True)
         self.videosTable.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
-        self.tabWidget.addTab(self.videosTable, "3 Latest Videos")
+        self.tabWidget.addTab(self.videosTable, "Latest Videos")
 
         chart_tab = QWidget()
         self.tabWidget.addTab(chart_tab, "Video Analytics")

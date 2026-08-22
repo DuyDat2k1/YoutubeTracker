@@ -208,12 +208,43 @@ class Database:
                      v.views, v.likes, v.comments),
                  )
 
+    def upsert_videos_batch(self, videos: list[VideoModel]) -> None:
+        if not videos:
+            return
+        rows = []
+        for v in videos:
+            pub = v.published_at.isoformat() if v.published_at else ""
+            rows.append((v.video_id, v.channel_db_id, v.title, pub,
+                         v.views, v.likes, v.comments))
+        with self._connect() as conn:
+            conn.executemany(
+                """
+                INSERT INTO Videos(VideoId,ChannelDbId,Title,PublishedAt,Views,Likes,Comments)
+                VALUES(?,?,?,?,?,?,?)
+                ON CONFLICT(VideoId) DO UPDATE SET
+                    Title=excluded.Title, PublishedAt=excluded.PublishedAt,
+                    Views=excluded.Views, Likes=excluded.Likes, Comments=excluded.Comments
+                """,
+                rows,
+            )
+
     def add_video_snapshot(self, video_id: str, views: int, likes: int, comments: int) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO VideoHistory(VideoId,CapturedAt,Views,Likes,Comments) VALUES(?,?,?,?,?)",
                 (video_id, now, views, likes, comments),
+            )
+
+    def add_video_snapshots_batch(self, snapshots: list[tuple[str, int, int, int]]) -> None:
+        if not snapshots:
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        rows = [(vid, now, views, likes, comments) for vid, views, likes, comments in snapshots]
+        with self._connect() as conn:
+            conn.executemany(
+                "INSERT INTO VideoHistory(VideoId,CapturedAt,Views,Likes,Comments) VALUES(?,?,?,?,?)",
+                rows,
             )
 
     def has_today_snapshot(self, video_id: str) -> bool:

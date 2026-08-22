@@ -6,10 +6,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QThread, Qt, Signal, Slot, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
-    QFileDialog, QGroupBox, QHeaderView, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea,
+    QApplication, QFileDialog, QGroupBox, QHeaderView, QHBoxLayout, QLabel,
+    QLineEdit, QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea,
     QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -22,10 +22,13 @@ try:
     import matplotlib
     matplotlib.use("QtAgg")
     from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+    from matplotlib.dates import DateFormatter
     from matplotlib.figure import Figure
     HAS_MATPLOTLIB = True
 except Exception:
     HAS_MATPLOTLIB = False
+
+X_AXIS_DAY_FORMAT = DateFormatter("%d/%m/%Y")
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "data"
 CONFIG_PATH = CONFIG_DIR / "config.ini"
@@ -260,8 +263,9 @@ class UrlListWidget(QGroupBox):
         QMessageBox.information(self, "Import", f"Imported {count} links.")
         self._scroll_to_bottom()
         self.imported.emit()
-        if hasattr(self.parent(), "_save_urls"):
-            self.parent()._save_urls()
+        main_window = self._get_main_window()
+        if main_window and hasattr(main_window, "_save_urls"):
+            main_window._save_urls()
 
     @staticmethod
     def _is_header_row(row: list[str]) -> bool:
@@ -347,6 +351,114 @@ class AnalyzeWorker(QThread):
                 self.error.emit(str(e))
 
 
+class ChannelRefreshWorker(QThread):
+    videos = Signal(list)
+    error = Signal(str)
+
+    def __init__(self, yt: YouTubeService, db: Database, channel_id: str, channel_db_id: int):
+        super().__init__()
+        self._yt = yt
+        self._db = db
+        self._channel_id = channel_id
+        self._channel_db_id = channel_db_id
+
+    def run(self) -> None:
+        try:
+            if not self._yt.is_configured:
+                self.videos.emit([])
+                return
+            latest = self._yt.get_latest_videos(self._channel_id, self._channel_db_id)
+            self._db.delete_channel_videos(self._channel_db_id)
+            self._db.upsert_videos_batch(latest)
+            snapshots = [(v.video_id, v.views, v.likes, v.comments) for v in latest]
+            self._db.add_video_snapshots_batch(snapshots)
+            self.videos.emit(latest)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class VideoStatsWorker(QThread):
+    stats = Signal(dict)
+    error = Signal(str)
+
+    def __init__(self, yt: YouTubeService, db: Database, video_id: str):
+        super().__init__()
+        self._yt = yt
+        self._db = db
+        self._video_id = video_id
+
+    def run(self) -> None:
+        try:
+            stats = self._yt.get_video_stats(self._video_id)
+            if stats and not self._db.has_today_snapshot(self._video_id):
+                self._db.add_video_snapshot(
+                    self._video_id, stats["views"], stats["likes"], stats["comments"]
+                )
+            self.stats.emit(stats or {})
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class LoadingOverlay(QWidget):
+    """Web-style spinner overlay, centered over its parent widget."""
+
+    def __init__(self, parent, color: QColor | None = None, text: str = "Đang tải dữ liệu..."):
+        super().__init__(parent)
+        self._angle = 0
+        self._text = text
+        self._color = color if color is not None else QColor(234, 88, 12)
+        if parent is not None:
+            parent.installEventFilter(self)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self.hide()
+
+    def eventFilter(self, obj, event):
+        if obj is self.parentWidget() and event.type() == QEvent.Resize:
+            self.setGeometry(self.parentWidget().rect())
+        return False
+
+    def showEvent(self, event):
+        if self.parentWidget() is not None:
+            self.setGeometry(self.parentWidget().rect())
+        self.raise_()
+        self._timer.start(33)
+        super().showEvent(event)
+
+    def hideEvent(self, event):
+        self._timer.stop()
+        super().hideEvent(event)
+
+    def _tick(self):
+        self._angle = (self._angle + 24) % 360
+        self.update()
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.fillRect(self.rect(), QColor(245, 246, 250, 220))
+
+        cx = self.width() / 2
+        cy = self.height() / 2
+        r = 18
+
+        pen = QPen(QColor(210, 213, 219), 4, Qt.SolidLine, Qt.RoundCap)
+        p.setPen(pen)
+        p.drawArc(int(cx - r), int(cy - r - 10), int(r * 2), int(r * 2), 0, 360 * 16)
+
+        pen = QPen(self._color, 4, Qt.SolidLine, Qt.RoundCap)
+        p.setPen(pen)
+        p.drawArc(int(cx - r), int(cy - r - 10), int(r * 2), int(r * 2),
+                  -self._angle * 16, 110 * 16)
+
+        f = p.font()
+        f.setPointSize(11)
+        p.setFont(f)
+        p.setPen(QColor(90, 95, 105))
+        p.drawText(self.rect().adjusted(0, int(r + 6), 0, 0),
+                   Qt.AlignHCenter | Qt.AlignTop, self._text)
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -354,21 +466,71 @@ class MainWindow(QMainWindow):
         self._api_key = ""
         self._yt = YouTubeService("")
         self._worker: AnalyzeWorker | None = None
+        self._refresh_worker: ChannelRefreshWorker | None = None
+        self._stats_worker: VideoStatsWorker | None = None
+        self._startup_worker: ChannelRefreshWorker | None = None
+        self._startup_queue: list[tuple[int, str]] = []
         self._current_video_channel_id: int | None = None
+        self._cached_channels: list[ChannelModel] = []
 
         self._build_ui()
+        self._videos_overlay = LoadingOverlay(self.videosTable)
+        self._channels_overlay = LoadingOverlay(
+            self.channelsTable,
+            color=QColor(34, 197, 94),
+            text="Đang tải kênh...",
+        )
+        self._analytics_overlay = LoadingOverlay(
+            self._analytics_tab,
+            text="Đang tải thống kê video...",
+        )
         self._connect_signals()
         self._load_api_key()
         self._load_saved_urls()
+        self._startup_refresh()
 
     def closeEvent(self, event) -> None:
-        if self._worker is not None:
-            if self._worker.isRunning():
-                self._worker.requestInterruption()
-                self._worker.wait(5000)
-            self._worker.deleteLater()
-            self._worker = None
+        for worker in (self._worker, self._refresh_worker, self._stats_worker, self._startup_worker):
+            if worker is not None and worker.isRunning():
+                worker.requestInterruption()
+                worker.wait(5000)
+                worker.deleteLater()
+        self._worker = None
+        self._refresh_worker = None
+        self._stats_worker = None
+        self._startup_worker = None
         super().closeEvent(event)
+
+    def _startup_refresh(self) -> None:
+        """Refresh data for all saved channels in background after startup."""
+        if not self._yt.is_configured or not self._cached_channels:
+            return
+        self._startup_queue = [(ch.id, ch.channel_id) for ch in self._cached_channels]
+        self._channels_overlay.show()
+        self._advance_startup_refresh()
+
+    def _advance_startup_refresh(self) -> None:
+        if not self._startup_queue:
+            self._startup_queue = []
+            self._channels_overlay.hide()
+            return
+        ch_db_id, ch_id = self._startup_queue.pop(0)
+        worker = ChannelRefreshWorker(self._yt, self._db, ch_id, ch_db_id)
+        self._startup_worker = worker
+        worker.videos.connect(lambda _videos: self._on_startup_refresh_done())
+        worker.error.connect(lambda _msg: self._on_startup_refresh_done())
+        worker.start()
+
+    def _on_startup_refresh_done(self) -> None:
+        if self._startup_worker is not None:
+            self._startup_worker.deleteLater()
+            self._startup_worker = None
+        urls = [c.url for c in self._cached_channels]
+        channels = self._db.get_channels_by_urls(urls)
+        self.channelsTable.blockSignals(True)
+        self._load_channels(channels)
+        self.channelsTable.blockSignals(False)
+        self._advance_startup_refresh()
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.MouseButtonPress:
@@ -611,6 +773,7 @@ class MainWindow(QMainWindow):
         self.tabWidget.addTab(channels_container, "Channels")
 
         chart_tab = QWidget()
+        self._analytics_tab = chart_tab
         self.tabWidget.addTab(chart_tab, "Video Analytics")
 
         main_layout.addWidget(self.tabWidget)
@@ -638,6 +801,7 @@ class MainWindow(QMainWindow):
     def _load_channels(self, channels: list | None = None) -> None:
         if channels is None:
             channels = self._db.get_channels()
+        self._cached_channels = list(channels)
         self.channelsTable.blockSignals(True)
         self.channelsTable.setRowCount(len(channels))
         self.channelsTable.setColumnCount(7)
@@ -704,29 +868,53 @@ class MainWindow(QMainWindow):
     def _on_channel_selected(self, row: int, _col: int, _prev_row: int, _prev_col: int) -> None:
         if row < 0:
             return
-        channels = self._db.get_channels()
-        if row >= len(channels):
+        if row >= len(self._cached_channels):
             return
-        ch = channels[row]
+        ch = self._cached_channels[row]
         self.urlList.highlight_url(ch.url)
         self.videoSearchInput.clear()
-        self._refresh_channel_videos(ch.id, ch.channel_id)
         self._load_chart(ch.id)
+        self._start_channel_refresh(ch.id, ch.channel_id)
         self.channelsTable.selectRow(row)
 
-    def _refresh_channel_videos(self, channel_db_id: int, channel_id: str) -> None:
-        if not self._yt.is_configured:
-            self._load_videos(channel_db_id)
-            return
-        try:
-            latest = self._yt.get_latest_videos(channel_id, channel_db_id)
-            self._db.delete_channel_videos(channel_db_id)
-            self._db.upsert_videos(latest)
-            for v in latest:
-                self._db.add_video_snapshot(v.video_id, v.views, v.likes, v.comments)
-        except Exception:
-            pass
+    def _start_channel_refresh(self, channel_db_id: int, channel_id: str) -> None:
+        if self._refresh_worker is not None and self._refresh_worker.isRunning():
+            self._refresh_worker.requestInterruption()
+            self._refresh_worker.wait(2000)
+        self.videosTable.setRowCount(0)
+        self.videosTable.setEnabled(False)
+        self.channelsTable.setEnabled(False)
+        self._videos_overlay.show()
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        self._refresh_worker = ChannelRefreshWorker(self._yt, self._db, channel_id, channel_db_id)
+        self._refresh_worker.videos.connect(lambda videos: self._on_channel_refreshed(videos, channel_db_id))
+        self._refresh_worker.error.connect(lambda msg: self._on_channel_refresh_error(msg, channel_db_id))
+        self._refresh_worker.start()
+
+    @Slot(list, int)
+    def _on_channel_refreshed(self, videos: list, channel_db_id: int) -> None:
+        self._videos_overlay.hide()
+        self.videosTable.setEnabled(True)
+        self.channelsTable.setEnabled(True)
+        QApplication.restoreOverrideCursor()
         self._load_videos(channel_db_id)
+        self._load_chart(channel_db_id)
+        if self._refresh_worker is not None:
+            self._refresh_worker.deleteLater()
+            self._refresh_worker = None
+
+    @Slot(str, int)
+    def _on_channel_refresh_error(self, msg: str, channel_db_id: int) -> None:
+        self._videos_overlay.hide()
+        self.videosTable.setEnabled(True)
+        self.channelsTable.setEnabled(True)
+        QApplication.restoreOverrideCursor()
+        QMessageBox.warning(self, "Lỗi làm mới", f"Không tải được video mới:\n{msg}")
+        self._load_videos(channel_db_id)
+        self._load_chart(channel_db_id)
+        if self._refresh_worker is not None:
+            self._refresh_worker.deleteLater()
+            self._refresh_worker = None
 
     @Slot(int, int, int, int)
     def _on_video_selected(self, row: int, _col: int, _prev_row: int, _prev_col: int) -> None:
@@ -739,11 +927,38 @@ class MainWindow(QMainWindow):
         if not video_data or "video_id" not in video_data:
             return
         vid = video_data["video_id"]
-        stats = self._yt.get_video_stats(vid)
-        if stats and not self._db.has_today_snapshot(vid):
-            self._db.add_video_snapshot(vid, stats["views"], stats["likes"], stats["comments"])
-        self._load_video_chart(vid)
+        if self._stats_worker is not None and self._stats_worker.isRunning():
+            self._stats_worker.requestInterruption()
+            self._stats_worker.wait(2000)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        self.videosTable.setEnabled(False)
+        self._analytics_overlay.show()
+        self._stats_worker = VideoStatsWorker(self._yt, self._db, vid)
+        self._stats_worker.stats.connect(lambda s: self._on_video_stats_ready(s, vid))
+        self._stats_worker.error.connect(lambda msg: self._on_video_stats_error(msg, vid))
+        self._stats_worker.start()
+
+    @Slot(dict, str)
+    def _on_video_stats_ready(self, stats: dict, video_id: str) -> None:
+        self._analytics_overlay.hide()
+        self.videosTable.setEnabled(True)
+        QApplication.restoreOverrideCursor()
+        self._load_video_chart(video_id)
         self.tabWidget.setCurrentIndex(1)
+        if self._stats_worker is not None:
+            self._stats_worker.deleteLater()
+            self._stats_worker = None
+
+    @Slot(str, str)
+    def _on_video_stats_error(self, msg: str, video_id: str) -> None:
+        self._analytics_overlay.hide()
+        self.videosTable.setEnabled(True)
+        QApplication.restoreOverrideCursor()
+        self._load_video_chart(video_id)
+        self.tabWidget.setCurrentIndex(1)
+        if self._stats_worker is not None:
+            self._stats_worker.deleteLater()
+            self._stats_worker = None
 
     def _load_videos(self, channel_db_id: int, query: str = "") -> None:
         self._current_video_channel_id = channel_db_id
@@ -793,6 +1008,7 @@ class MainWindow(QMainWindow):
                 ax.plot(dates, subs, marker="o", linewidth=2)
                 ax.set_title("Subscriber Trend")
                 ax.set_ylabel("Subscribers")
+                ax.xaxis.set_major_formatter(X_AXIS_DAY_FORMAT)
                 self._chart_fig.autofmt_xdate()
         else:
             ax.text(0.5, 0.5, "No data available", ha="center", va="center", transform=ax.transAxes)
@@ -821,6 +1037,7 @@ class MainWindow(QMainWindow):
         ax1.set_title("Views (7 days)")
         ax1.set_ylabel("Views")
         ax1.grid(True, alpha=0.3)
+        ax1.xaxis.set_major_formatter(X_AXIS_DAY_FORMAT)
         self._chart_fig.autofmt_xdate()
 
         ax2 = self._chart_fig.add_subplot(132)
@@ -828,6 +1045,7 @@ class MainWindow(QMainWindow):
         ax2.set_title("Likes (7 days)")
         ax2.set_ylabel("Likes")
         ax2.grid(True, alpha=0.3)
+        ax2.xaxis.set_major_formatter(X_AXIS_DAY_FORMAT)
         self._chart_fig.autofmt_xdate()
 
         ax3 = self._chart_fig.add_subplot(133)
@@ -835,6 +1053,7 @@ class MainWindow(QMainWindow):
         ax3.set_title("Comments (7 days)")
         ax3.set_ylabel("Comments")
         ax3.grid(True, alpha=0.3)
+        ax3.xaxis.set_major_formatter(X_AXIS_DAY_FORMAT)
         self._chart_fig.autofmt_xdate()
 
         self._chart_fig.tight_layout()
@@ -859,6 +1078,7 @@ class MainWindow(QMainWindow):
             self._worker.wait(2000)
         self.analyzeBtn.setEnabled(False)
         self._progress_widget.start(len(urls))
+        self._channels_overlay.show()
 
         self._worker = AnalyzeWorker(self._yt, self._db, urls)
         self._worker.progress.connect(self._on_progress)
@@ -878,6 +1098,7 @@ class MainWindow(QMainWindow):
 
     @Slot(int, int)
     def _on_analyze_done(self, ok: int, total: int) -> None:
+        self._channels_overlay.hide()
         self.analyzeBtn.setEnabled(True)
         self._progress_widget.finish()
         self.channelsTable.blockSignals(True)
@@ -894,6 +1115,7 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def _on_analyze_error(self, msg: str) -> None:
+        self._channels_overlay.hide()
         self.analyzeBtn.setEnabled(True)
         self._progress_widget.finish()
         QMessageBox.critical(self, "API Error", msg)

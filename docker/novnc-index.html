@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>YouTube Competitor Tracker</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: #101418;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+        #screen { width: 100%; height: 100%; }
+        #status {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #9aa3ad;
+            font-size: 16px;
+            text-align: center;
+        }
+    </style>
+    <script src="core/rfb.js"></script>
+</head>
+<body>
+    <div id="screen"></div>
+    <div id="status">Connecting...</div>
+    <script>
+        const proto = location.protocol === "https:" ? "wss" : "ws";
+        const url = proto + "://" + location.host + "/websockify";
+        const statusEl = document.getElementById("status");
+        let rfb = null;
+
+        function connect() {
+            try {
+                rfb = new RFB(document.getElementById("screen"), url, {
+                    shared: true,
+                    scaleViewport: true,
+                    resizeSession: false,
+                    background: "#101418",
+                });
+                rfb.addEventListener("connect", () => { statusEl.style.display = "none"; });
+                rfb.addEventListener("disconnect", (e) => {
+                    statusEl.style.display = "block";
+                    statusEl.textContent = e.detail.clean
+                        ? "Disconnected - retrying..."
+                        : "Connection failed - retrying...";
+                    setTimeout(connect, 2000);
+                });
+            } catch (err) {
+                statusEl.textContent = "Error: " + err +
+                    ' - try <a href="/vnc.html?autoconnect=1" style="color:#7ab7ff">vnc.html</a>';
+                setTimeout(connect, 3000);
+            }
+        }
+        connect();
+    </script>
+</body>
+</html>

@@ -8,3 +8,5 @@ data/tracker.db
 data/config.ini
 *.csv
 !data/sample_channels.csv
+venv/
+.hostlibs/

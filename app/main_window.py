@@ -701,7 +701,7 @@ class MainWindow(QMainWindow):
         self.videosTable.setColumnCount(5)
         self.videosTable.setHorizontalHeaderLabels(["TITLE", "PUBLISHED", "VIEWS", "LIKES", "COMMENTS"])
         self.videosTable.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
-        vcol_widths = [345, 125, 125, 125, 125]
+        vcol_widths = [345, 220, 125, 125, 125]
         for col, width in enumerate(vcol_widths):
             self.videosTable.setColumnWidth(col, width)
         videos_layout.addWidget(self.videosTable)
@@ -973,7 +973,7 @@ class MainWindow(QMainWindow):
         self.videosTable.setHorizontalHeaderLabels(["TITLE", "PUBLISHED", "VIEWS", "LIKES", "COMMENTS"])
         self.videosTable.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
 
-        vcol_widths = [345, 125, 125, 125, 125]
+        vcol_widths = [345, 220, 125, 125, 125]
         for col, width in enumerate(vcol_widths):
             self.videosTable.setColumnWidth(col, width)
 
